@@ -1,131 +1,94 @@
-#include <stdio.h>
-#include <iostream>
-#include <cstring>
 #include <stdlib.h>
+#include <fstream>
+#include <stdio.h>
 #include <unistd.h>
+#include <algorithm>
+#include <ctime>
+#include <iostream>
+#include <string>
+#include <dirent.h>
+#include <signal.h>
+#include <cstddef>
+#include <cstring>
+#include <utime.h>
+#include <vector>
 #include <pthread.h>
-#include <string.h>
+#include <iostream>
+#include <sys/types.h> 
 
 using namespace std;
 
-const int THE_END = -1;
-long width = 5;
-long height = 2;
-long min_son = 2;
-long max_son = 4;
-long min_father = 1;
-long max_father = 3;
+int width = 5;
+int height = 2;
+int min_time[2] = {1,2};
+int max_time[2] = {2,3};
 pthread_mutex_t mutex;
-string *their_wall;
+string *wall;
 
 void show_wall() {
 	cout << endl;
-	for(int i = 0; i < height; i++){
-		cout << their_wall[i] << endl;
+	for(int i = 0; i <= height; i++){
+		cout << wall[height-i] << endl;
 	}
 	cout << endl;
 }
 
-void *father_func(void *arg) {
-	long x = THE_END, y;
-	for (;;) {
-		pthread_mutex_lock(&mutex);
-		if (x >= 0) {
-			their_wall[x] = their_wall[x] + 'F';
-			show_wall();
-		}
-		x = THE_END;
-		for (long m = 1; m <= height; m += 2) {
-			for (long n = 0; ; ++n) {
-				long temp;
-				temp = (m)%2 + n*2;
-				if (temp > width*2){
-					break;
-				}else if (their_wall[m][temp] != ' '){
-					continue; 
-				}else if ((their_wall[m-1][temp] != ' ') && (their_wall[m-1][temp+1] != ' ')) {
-					x = m;
-					y = temp;
-					m = height;
-					break;
-				}
-				else {
-					pthread_mutex_unlock(&mutex);
-					usleep(max_son*10000);
-					pthread_mutex_lock(&mutex);
-					n--;
-					m = m - 2;
-				}
-			}
-		}
-		pthread_mutex_unlock(&mutex);
-		if (x != THE_END)
-			usleep((min_father + rand() % (max_father - min_father)) * 10000);
-		else return NULL;
-		
-	}
+void build_brick(int x, int y, int son){
+	while(wall[y-1][2*x+2] == ' ');
+	usleep((min_time[son] + rand()%(max_time[son]-min_time[son]))*10000);
+	wall[y][2*x - 1 + son] = '[';
+	wall[y][2*x + son] = ']';
+	pthread_mutex_lock(&mutex);
+	show_wall();
+	pthread_mutex_unlock(&mutex);
 }
 
+void *work_func(void *arg) {
 
-void *son_func(void *arg) {
-	long x = THE_END, y;
-	for (;;) {
-		pthread_mutex_lock(&mutex);
-		if (x >= 0) {
-			their_wall[x] = their_wall[x] + 'S';
+	int son = *((int*)arg);
+	cout << son <<" thread" << endl;
+	for(int y = 1 + son; y <= height; y += 2){
+		if(son){ // build first half of brick; only for son as he always build odd lines
+			while(wall[y-1][2] == ' ');
+			usleep((min_time[son] + rand()%(max_time[son]-min_time[son]))*10000);
+			wall[y][1] = 'h';
+			pthread_mutex_lock(&mutex);
 			show_wall();
+			pthread_mutex_unlock(&mutex);
 		}
-		x = THE_END;
-		for (long m = 2; m <= height; m += 2) {
-			for (long n = 0; ; ++n) {
-				long temp;
-				temp = m%2 + n*2;
-				if (temp > width*2){
-					break;
-				}
-				else if (their_wall[m][temp] != ' ')
-					continue; 
-				else if ((their_wall[m-1][temp] != ' ') && (their_wall[m-1][temp+1] != ' ')) {
-					x = m;
-					y = temp;
-					m = height;
-					break;
-				}
-				else {
-					pthread_mutex_unlock(&mutex);
-					usleep(max_father*10000);
-					n--;
-					m = m - 2;
-					pthread_mutex_lock(&mutex);
-				}
-			}
+		
+		for(int x = 1; x <= width - son; x++){
+			build_brick(x, y, son);
 		}
-		pthread_mutex_unlock(&mutex);
-		if (x != THE_END)
-			usleep((min_son + rand() % (max_son - min_son)) * 10000);
-		else return NULL;
+
+		if(son){ // build last half of brick; only for son as he always build odd lines
+			while(wall[y-1][2*width] == ' ');
+			usleep((min_time[son] + rand()%(max_time[son]-min_time[son]))*10000);
+			wall[y][2*width] = 'h';
+			pthread_mutex_lock(&mutex);
+			show_wall();
+			pthread_mutex_unlock(&mutex);
+		}
 	}
+	printf("%d is done\n", son);
 }
 
 int main(){
-	scanf("%ld %ld \n %ld %ld \n %ld %ld", &width, &height, &min_father, &max_father, &min_son, &max_son);
-	their_wall = (string*) malloc((height+1) * sizeof(string));
-	for (long i = 0; i <= height; ++i) {
-		for (long j = 0; j <= 2*width+1; ++j)
-			their_wall[i][j] = ' ';
-		their_wall[i][(width+1)*2+1] = 0;
+	scanf("%d %d \n %d %d \n %d %d", &width, &height, max_time, min_time, max_time+1, min_time+1);
+	wall = (string*) malloc((height+1) * sizeof(string));
+	for(int i = 0; i < height + 1; i++){
+		for(int j = 0; j < 2*width + 1; j++){
+			if(j == 0 || i == 0) wall[i].push_back('#');
+			else wall[i].push_back(' ');
+		}
 	}
-	for (long j = 0; j <= 2*width+1; ++j)
-		their_wall[0][j] = '#';
-	for (long i = 1; i <= height; i += 2) {
-		their_wall[i][0] = '#';
-		their_wall[i][2*width+1] = '#';
-	}
+	pthread_t builders[2];
 	show_wall();
 	pthread_mutex_init(&mutex, NULL);
-	pthread_t son, father;
-	pthread_create(&father, NULL, father_func, NULL);
-	pthread_create(&son, NULL, son_func, NULL);
-	pthread_join(son, NULL);
-	pthread_join(father, NULL);
+	int arg[2] = {0,1};
+	cout <<arg[0] << arg[1] <<endl;
+	pthread_create(builders, NULL, work_func, (void*)(arg));
+	pthread_create(builders+1, NULL, work_func, (void*)(arg+1));
+	pthread_join(builders[1], NULL);
+	pthread_join(builders[0], NULL);
 }
